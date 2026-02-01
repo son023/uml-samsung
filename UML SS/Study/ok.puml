@@ -1,0 +1,411 @@
+@startuml Sequence_View_Registrations
+title Sequence Diagram: Xem List Đăng ký (UML 2.5)
+
+' Định nghĩa Lifelines
+actor "User\n(Mentee/Admin/Mentor)" as User
+participant "RegistrationsPanel" as RegP
+participant "ApiClient" as AC
+participant "JwtAuthenticationFilter" as JWTFilter
+participant "JwtUtil" as JWT
+participant "CustomUserDetailsService" as UserDetails
+participant "SecurityConfig" as Security
+participant "MenteeController" as MeC
+participant "MenteeService" as MeS
+participant "MenteeRepository" as MeR
+participant "MentorMenteeController" as MMC
+participant "MentorMenteeRegistrationService" as MMRS
+participant "MentorMenteeRegistrationRepository" as MMRR
+database "Database" as DB
+participant "MentorMenteeRegistrationMapper" as MapMMR
+participant "GlobalExceptionHandler" as ExceptionHandler
+
+== Initial Load ==
+User -> RegP: Open "View All Registrations" tab
+activate RegP
+RegP -> RegP: initializeUI()
+
+alt User is ADMIN or MENTOR
+    RegP -> RegP: loadMentees()
+    activate RegP
+    RegP -> AC: getAllMentees()
+    activate AC
+    AC -> AC: Build HTTP request\nAdd Authorization: Bearer {token}
+    AC -> JWTFilter: HTTP Request\nGET /api/mentees\nAuthorization: Bearer {token}
+
+    == JWT Authentication ==
+    activate JWTFilter
+    JWTFilter -> JWTFilter: Extract and validate token
+    JWTFilter -> JWT: extractUsername(token)
+    activate JWT
+    JWT --> JWTFilter: username
+    deactivate JWT
+    JWTFilter -> UserDetails: loadUserByUsername(username)
+    activate UserDetails
+    UserDetails -> DB: SELECT * FROM users WHERE username = ?
+    activate DB
+    DB --> UserDetails: User entity
+    deactivate DB
+    UserDetails --> JWTFilter: UserDetails with ROLE_ADMIN or ROLE_MENTOR
+    deactivate UserDetails
+    JWTFilter -> JWT: validateToken(token, userDetails)
+    activate JWT
+    JWT --> JWTFilter: true (valid)
+    deactivate JWT
+    JWTFilter -> JWTFilter: Set authentication in SecurityContext
+    JWTFilter -> MeC: Continue to controller
+    deactivate JWTFilter
+
+    == Role-Based Authorization Check ==
+    MeC -> Security: @PreAuthorize("isAuthenticated()")
+    activate Security
+    Security -> Security: Check SecurityContext\nVerify user is authenticated
+    alt User not authenticated
+        Security -> ExceptionHandler: AccessDeniedException
+        activate ExceptionHandler
+        ExceptionHandler --> MeC: HTTP 403 Forbidden
+        deactivate ExceptionHandler
+        MeC --> AC: HTTP 403 Forbidden
+        AC --> RegP: IOException
+        RegP --> User: Show error: "Access Denied"
+    else User authenticated
+        Security --> MeC: Authorization granted
+        deactivate Security
+        MeC -> MeS: getAllMentees()
+    activate MeS
+    MeS -> MeR: findAll()
+    activate MeR
+    MeR -> DB: SELECT * FROM users WHERE user_type = 'MENTEE' AND active = true
+    activate DB
+    DB --> MeR: List<Mentee>
+    deactivate DB
+    MeR --> MeS: List<Mentee>
+    deactivate MeR
+    MeS --> MeC: List<MenteeDTO>
+    deactivate MeS
+    MeC --> AC: ResponseEntity<List<MenteeDTO>>
+    deactivate MeC
+    AC --> RegP: List<MenteeDTO>
+    deactivate AC
+    RegP -> RegP: Populate menteeFilterCombo
+    deactivate RegP
+end
+
+RegP -> RegP: loadRegistrations()
+activate RegP
+
+== Load Registrations ==
+RegP -> AC: getAllRegistrations(page, size, search, mentorId, menteeId, status)
+activate AC
+note right of AC
+  Parameters:
+  - page: 0
+  - size: 10
+  - search: String (optional)
+  - mentorId: null
+  - menteeId: Long (if filter selected)
+  - status: String (PENDING/APPROVED/etc)
+end note
+
+AC -> AC: Build HTTP GET request\nAdd Authorization: Bearer {token}
+AC -> JWTFilter: HTTP Request\nGET /api/registrations?page=0&size=10&menteeId={id}&status={status}\nAuthorization: Bearer {token}
+
+== JWT Authentication (Load Registrations) ==
+activate JWTFilter
+JWTFilter -> JWTFilter: Extract and validate token
+JWTFilter -> JWT: extractUsername(token)
+activate JWT
+JWT --> JWTFilter: username
+deactivate JWT
+JWTFilter -> UserDetails: loadUserByUsername(username)
+activate UserDetails
+UserDetails -> DB: SELECT * FROM users WHERE username = ?
+activate DB
+DB --> UserDetails: User entity
+deactivate DB
+UserDetails --> JWTFilter: UserDetails with authorities
+deactivate UserDetails
+JWTFilter -> JWT: validateToken(token, userDetails)
+activate JWT
+JWT --> JWTFilter: true (valid)
+deactivate JWT
+JWTFilter -> JWTFilter: Set authentication in SecurityContext
+JWTFilter -> MMC: Continue to controller
+deactivate JWTFilter
+
+== Role-Based Authorization Check (Load Registrations) ==
+MMC -> Security: @PreAuthorize("isAuthenticated()")
+activate Security
+Security -> Security: Check SecurityContext\nVerify user is authenticated
+alt User not authenticated
+    Security -> ExceptionHandler: AccessDeniedException
+    activate ExceptionHandler
+    ExceptionHandler --> MMC: HTTP 403 Forbidden
+    deactivate ExceptionHandler
+    MMC --> AC: HTTP 403 Forbidden
+    AC --> RegP: IOException
+    RegP --> User: Show error: "Access Denied"
+else User authenticated
+    Security --> MMC: Authorization granted
+    deactivate Security
+    MMC -> MMRS: getAllRegistrations(search, mentorId, menteeId, status, pageable)
+    activate MMRS
+
+== Build Specification ==
+MMRS -> MMRS: Create Specification<MentorMenteeRegistration>
+activate MMRS
+note right of MMRS
+  Specification predicates:
+  - If menteeId: WHERE mentee.id = ?
+  - If status: WHERE status = ?
+  - If search: WHERE mentor.fullName LIKE ?\n  OR mentor.expertise LIKE ?\n  OR mentee.fullName LIKE ?\n  OR mentee.studentId LIKE ?
+end note
+
+MMRS -> MMRR: findAll(specification, pageable)
+activate MMRR
+MMRR -> DB: SELECT r.*, m.*, me.*\nFROM mentor_mentee_registrations r\nINNER JOIN users m ON r.mentor_id = m.id\nINNER JOIN users me ON r.mentee_id = me.id\nWHERE (conditions from specification)\nORDER BY r.registered_at DESC\nLIMIT ? OFFSET ?
+activate DB
+DB --> MMRR: Page<MentorMenteeRegistration>
+deactivate DB
+MMRR --> MMRS: Page<MentorMenteeRegistration>
+deactivate MMRR
+
+== Map to DTOs ==
+loop For each registration
+    MMRS -> MapMMR: toDTO(registration)
+    activate MapMMR
+    MapMMR -> MapMMR: Map mentor.id -> mentorId\nMap mentor.fullName -> mentorName\nMap mentee.id -> menteeId\nMap mentee.fullName -> menteeName\nMap mentee.studentId -> studentId
+    MapMMR --> MMRS: MentorMenteeRegistrationDTO
+    deactivate MapMMR
+end
+
+MMRS --> MMC: Page<MentorMenteeRegistrationDTO>
+deactivate MMRS
+MMC --> AC: ResponseEntity<Page<MentorMenteeRegistrationDTO>>
+deactivate MMC
+AC --> RegP: PageResponse<MentorMenteeRegistrationDTO>
+deactivate AC
+
+== Display Results ==
+RegP -> RegP: Clear table
+RegP -> RegP: Add rows to table
+loop For each registration DTO
+    RegP -> RegP: Add row: [id, mentorId, mentorName,\nmenteeId, menteeName, status,\nregisteredAt, purpose]
+end
+RegP -> RegP: Update pagination info
+RegP -> RegP: Enable/disable pagination buttons
+RegP --> User: Display registrations table\nwith pagination controls
+deactivate RegP
+
+== Filter/Search ==
+User -> RegP: Enter search text\nSelect status filter\nSelect mentee (if ADMIN/MENTOR)
+activate RegP
+User -> RegP: Click "Search" button
+RegP -> RegP: loadRegistrations()\n(currentPage = 0)
+activate RegP
+RegP -> AC: getAllRegistrations(0, 10, search, null, menteeId, status)
+activate AC
+AC -> MMC: GET /api/registrations?page=0&size=10&search={text}&menteeId={id}&status={status}
+activate MMC
+MMC -> MMRS: getAllRegistrations(search, null, menteeId, status, pageable)
+activate MMRS
+MMRS -> MMRS: Build Specification with search predicates
+MMRS -> MMRR: findAll(spec, pageable)
+activate MMRR
+MMRR -> DB: SELECT with LIKE conditions for search
+activate DB
+DB --> MMRR: Filtered results
+deactivate DB
+MMRR --> MMRS: Page<MentorMenteeRegistration>
+deactivate MMRR
+MMRS --> MMC: Page<MentorMenteeRegistrationDTO>
+deactivate MMRS
+MMC --> AC: ResponseEntity
+deactivate MMC
+AC --> RegP: PageResponse
+deactivate AC
+RegP -> RegP: Update table with filtered results
+RegP --> User: Display filtered registrations
+deactivate RegP
+
+== Cancel Registration (MENTEE only) ==
+alt User is MENTEE
+    User -> RegP: Select own registration\nClick "Hủy Đăng Ký"
+    activate RegP
+    RegP -> RegP: handleCancelRegistration()
+    RegP -> RegP: Show confirmation dialog
+    RegP --> User: "Bạn có chắc chắn muốn hủy đăng ký này?"
+    User -> RegP: Click "Yes"
+    RegP -> AC: deleteRegistration(registrationId)
+    activate AC
+    AC -> AC: Build HTTP DELETE request\nAdd Authorization: Bearer {token}
+    AC -> JWTFilter: HTTP Request\nDELETE /api/registrations/{id}\nAuthorization: Bearer {token}
+
+    == JWT Authentication (Cancel) ==
+    activate JWTFilter
+    JWTFilter -> JWTFilter: Extract and validate token
+    JWTFilter -> JWT: extractUsername(token)
+    activate JWT
+    JWT --> JWTFilter: username
+    deactivate JWT
+    JWTFilter -> UserDetails: loadUserByUsername(username)
+    activate UserDetails
+    UserDetails -> DB: SELECT * FROM users WHERE username = ?
+    activate DB
+    DB --> UserDetails: User entity
+    deactivate DB
+    UserDetails --> JWTFilter: UserDetails with ROLE_MENTEE
+    deactivate UserDetails
+    JWTFilter -> JWT: validateToken(token, userDetails)
+    activate JWT
+    JWT --> JWTFilter: true (valid)
+    deactivate JWT
+    JWTFilter -> JWTFilter: Set authentication in SecurityContext
+    JWTFilter -> MMC: Continue to controller
+    deactivate JWTFilter
+
+    == Role-Based Authorization Check (Cancel) ==
+    MMC -> Security: @PreAuthorize("hasRole('MENTEE')")
+    activate Security
+    Security -> Security: Check SecurityContext\nVerify has ROLE_MENTEE
+    alt User does not have MENTEE role
+        Security -> ExceptionHandler: AccessDeniedException
+        activate ExceptionHandler
+        ExceptionHandler --> MMC: HTTP 403 Forbidden
+        deactivate ExceptionHandler
+        MMC --> AC: HTTP 403 Forbidden
+        AC --> RegP: IOException("Access Denied")
+        RegP --> User: Show error: "Access Denied"
+    else User has MENTEE role
+        Security --> MMC: Authorization granted
+        deactivate Security
+        MMC -> MMRS: deleteRegistration(id)
+        activate MMRS
+
+        == Business Validation ==
+        MMRS -> MMRR: findById(id)
+        activate MMRR
+        MMRR -> DB: SELECT * FROM mentor_mentee_registrations WHERE id = ?
+        activate DB
+        alt Registration not found
+            DB --> MMRR: Optional.empty()
+            deactivate DB
+            MMRR --> MMRS: Optional.empty()
+            deactivate MMRR
+            MMRS -> MMRS: throw new ResourceNotFoundException\n("Registration", "id", id)
+            MMRS --> MMC: throw ResourceNotFoundException
+            MMC -> ExceptionHandler: Catch ResourceNotFoundException
+            activate ExceptionHandler
+            ExceptionHandler -> ExceptionHandler: handleResourceNotFoundException()\nCreate ErrorResponse\nHTTP 404 Not Found
+            ExceptionHandler --> MMC: ResponseEntity<ErrorResponse>\nHTTP 404
+            deactivate ExceptionHandler
+            MMC --> AC: HTTP 404 Not Found\nErrorResponse
+            AC --> RegP: IOException("Registration not found...")
+            RegP --> User: Show error: "Registration not found"
+        else Registration found
+            DB --> MMRR: MentorMenteeRegistration entity
+            deactivate DB
+            MMRR --> MMRS: Optional<MentorMenteeRegistration>
+            deactivate MMRR
+
+            == Check Ownership (Business Rule) ==
+            MMRS -> MMRS: Verify menteeId matches currentUserId
+            alt Not owner
+                MMRS -> MMRS: throw new UnauthorizedException\n("You can only cancel your own registrations")
+                MMRS --> MMC: throw UnauthorizedException
+                MMC -> ExceptionHandler: Catch UnauthorizedException
+                activate ExceptionHandler
+                ExceptionHandler -> ExceptionHandler: handleUnauthorizedException()\nCreate ErrorResponse\nHTTP 401 Unauthorized
+                ExceptionHandler --> MMC: ResponseEntity<ErrorResponse>\nHTTP 401
+                deactivate ExceptionHandler
+                MMC --> AC: HTTP 401 Unauthorized\nErrorResponse
+                AC --> RegP: IOException("Unauthorized...")
+                RegP --> User: Show error: "You can only cancel your own registrations"
+            else Owner
+                MMRS -> MMRR: deleteById(id)
+                activate MMRR
+                MMRR -> DB: DELETE FROM mentor_mentee_registrations WHERE id = ?
+                activate DB
+                alt Database error
+                    DB --> MMRR: SQLException
+                    deactivate DB
+                    MMRR --> MMRS: Exception
+                    MMRS --> MMC: throw Exception
+                    MMC -> ExceptionHandler: Catch Exception
+                    activate ExceptionHandler
+                    ExceptionHandler -> ExceptionHandler: handleGlobalException()\nHTTP 500 Internal Server Error
+                    ExceptionHandler --> MMC: ResponseEntity<ErrorResponse>\nHTTP 500
+                    deactivate ExceptionHandler
+                    MMC --> AC: HTTP 500 Internal Server Error
+                    AC --> RegP: IOException
+                    RegP --> User: Show error: "Internal Server Error"
+                else Success
+                    DB --> MMRR: void
+                    deactivate DB
+                    MMRR --> MMRS: void
+                    deactivate MMRR
+                    MMRS --> MMC: void
+                    deactivate MMRS
+                    MMC --> AC: HTTP 204 No Content
+                    deactivate MMC
+                    AC --> RegP: Success
+                    deactivate AC
+
+                    RegP -> RegP: Show success message
+                    RegP -> RegP: loadRegistrations() (refresh)
+                    activate RegP
+    RegP -> AC: getAllRegistrations(...)
+    activate AC
+    AC -> MMC: GET /api/registrations
+    activate MMC
+    MMC -> MMRS: getAllRegistrations(...)
+    activate MMRS
+    MMRS -> MMRR: findAll(...)
+    activate MMRR
+    MMRR -> DB: SELECT (registration đã bị xóa)
+    activate DB
+    DB --> MMRR: Updated page
+    deactivate DB
+    MMRR --> MMRS: Page
+    deactivate MMRR
+    MMRS --> MMC: Page<DTO>
+    deactivate MMRS
+    MMC --> AC: ResponseEntity
+    deactivate MMC
+    AC --> RegP: PageResponse
+    deactivate AC
+    RegP -> RegP: Update table (registration removed)
+    RegP --> User: Updated list\n(registration removed)
+    deactivate RegP
+end
+
+== Pagination ==
+User -> RegP: Click "Next >" or "< Previous"
+activate RegP
+RegP -> RegP: Update currentPage
+RegP -> RegP: loadRegistrations()
+activate RegP
+RegP -> AC: getAllRegistrations(newPage, size, ...)
+activate AC
+AC -> MMC: GET /api/registrations?page={newPage}&size=10
+activate MMC
+MMC -> MMRS: getAllRegistrations(..., newPageable)
+activate MMRS
+MMRS -> MMRR: findAll(spec, newPageable)
+activate MMRR
+MMRR -> DB: SELECT ... LIMIT 10 OFFSET {newOffset}
+activate DB
+DB --> MMRR: Next/Previous page
+deactivate DB
+MMRR --> MMRS: Page
+deactivate MMRR
+MMRS --> MMC: Page<DTO>
+deactivate MMRS
+MMC --> AC: ResponseEntity
+deactivate MMC
+AC --> RegP: PageResponse
+deactivate AC
+RegP -> RegP: Update table with new page
+RegP --> User: Display new page
+deactivate RegP
+
+@enduml

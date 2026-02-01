@@ -1,0 +1,157 @@
+@startuml Entity_Class_Diagram
+skinparam class {
+    BackgroundColor<<abstract>> #E3F2FD
+    BackgroundColor<<entity>> #C8E6C9
+    BackgroundColor<<enum>> #FFF9C4
+    ArrowColor #1976D2
+    BorderColor #1976D2
+}
+
+' ============================================
+' Base Entity - User (Abstract)
+' ============================================
+abstract class User <<abstract>> {
+    - Long id
+    - String username
+    - String password
+    - String email
+    - String fullName
+    - String phone
+    - UserType userType
+    - Boolean active
+    - LocalDateTime createdAt
+    - LocalDateTime updatedAt
+}
+
+' ============================================
+' User Subclasses
+' ============================================
+class Admin <<entity>> {
+    - String department
+    - String position
+}
+
+class Mentor <<entity>> {
+    - String expertise
+    - Integer yearsOfExperience
+    - String bio
+}
+
+class Mentee <<entity>> {
+    - String studentId
+    - String major
+    - Integer yearOfStudy
+}
+
+' ============================================
+' Subject Entity
+' ============================================
+class Subject <<entity>> {
+    - Long id
+    - String subjectCode
+    - String subjectName
+    - String description
+    - Integer credits
+    - Integer maxStudents
+    - Boolean active
+    - LocalDateTime createdAt
+    - LocalDateTime updatedAt
+}
+
+' ============================================
+' Join/Association Entities
+' ============================================
+class MentorSubject <<entity>> {
+    - Long id
+    - LocalDateTime assignedAt
+    - Mentor mentor
+    - Subject subject
+}
+
+class MentorMenteeRegistration <<entity>> {
+    - Long id
+    - RegistrationStatus status
+    - LocalDateTime registeredAt
+    - LocalDateTime updatedAt
+    - String purpose
+    - String notes
+    - Mentor mentor
+    - Mentee mentee
+}
+
+' ============================================
+' Enumerations
+' ============================================
+enum UserType <<enum>> {
+    ADMIN
+    MENTOR
+    MENTEE
+}
+
+enum RegistrationStatus <<enum>> {
+    PENDING
+    APPROVED
+    REJECTED
+    COMPLETED
+}
+
+' ============================================
+' Inheritance Relationships (Generalization)
+' ============================================
+User <|-- Admin
+User <|-- Mentor
+User <|-- Mentee
+
+' ============================================
+' Unidirectional Relationships (Association)
+' MentorSubject và MentorMenteeRegistration chứa references
+' Mentor, Subject, Mentee KHÔNG chứa collections
+' ============================================
+MentorSubject "*" --> "1" Mentor : mentor
+MentorSubject "*" --> "1" Subject : subject
+
+MentorMenteeRegistration "*" --> "1" Mentor : mentor
+MentorMenteeRegistration "*" --> "1" Mentee : mentee
+
+' ============================================
+' Enum Usage (Dependency)
+' ============================================
+User ..> UserType : uses
+MentorMenteeRegistration ..> RegistrationStatus : uses
+
+' ============================================
+' Notes
+' ============================================
+note right of User
+    **Inheritance Strategy: JOINED**
+    - Base table: users
+    - Child tables: admins, mentors, mentees
+    - Discriminator: user_type
+    - Inheritance: Generalization
+end note
+
+note right of MentorSubject
+    **Join Entity: mentor_subjects**
+    - Unique constraint: (mentor_id, subject_id)
+    - **Unidirectional**: Chỉ MentorSubject chứa
+      references đến Mentor và Subject
+    - Mentor/Subject KHÔNG chứa collections
+end note
+
+note right of MentorMenteeRegistration
+    **Join Entity: mentor_mentee_registrations**
+    - Unique constraint: (mentor_id, mentee_id)
+    - **Unidirectional**: Chỉ Registration chứa
+      references đến Mentor và Mentee
+    - Mentor/Mentee KHÔNG chứa collections
+end note
+
+note bottom of Subject
+    **Subject Entity**
+    - Standalone entity
+    - Represents academic subjects/courses
+    - Can be assigned to multiple mentors
+    - Tracks credits and max students
+end note
+
+@enduml

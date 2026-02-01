@@ -1,0 +1,527 @@
+@startuml Class_Diagram_Registration_System
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam packageStyle rectangle
+
+title Class Diagram - Mentor-Mentee Registration System (UML 2.5)
+
+' ============================================
+' ENTITY CLASSES (Domain Layer)
+' ============================================
+package "Entity Layer" <<Rectangle>> {
+
+    abstract class User <<Entity>> {
+        - id : Long
+        - username : String
+        - password : String
+        - email : String
+        - fullName : String
+        - phone : String
+        - userType : UserType
+        - active : Boolean
+        - createdAt : LocalDateTime
+        - updatedAt : LocalDateTime
+        __
+        + getId() : Long
+        + getUsername() : String
+        + getEmail() : String
+        + getFullName() : String
+        + setPassword(String) : void
+    }
+
+    class Mentor <<Entity>> {
+        - expertise : String
+        - yearsOfExperience : Integer
+        - bio : String
+        __
+        + getExpertise() : String
+        + getYearsOfExperience() : Integer
+        + getBio() : String
+    }
+
+    class Mentee <<Entity>> {
+        - studentId : String
+        - major : String
+        - yearOfStudy : Integer
+        __
+        + getStudentId() : String
+        + getMajor() : String
+        + getYearOfStudy() : Integer
+    }
+
+    class Subject <<Entity>> {
+        - id : Long
+        - subjectCode : String
+        - subjectName : String
+        - description : String
+        - credits : Integer
+        - maxStudents : Integer
+        - active : Boolean
+        __
+        + getId() : Long
+        + getSubjectCode() : String
+        + getSubjectName() : String
+    }
+
+    class MentorSubject <<Entity>> {
+        - id : Long
+        - assignedAt : LocalDateTime
+        __
+        + getId() : Long
+        + getMentor() : Mentor
+        + getSubject() : Subject
+        + getAssignedAt() : LocalDateTime
+    }
+
+    class MentorMenteeRegistration <<Entity>> {
+        - id : Long
+        - status : RegistrationStatus
+        - registeredAt : LocalDateTime
+        - updatedAt : LocalDateTime
+        - purpose : String
+        - notes : String
+        __
+        + getId() : Long
+        + getMentor() : Mentor
+        + getMentee() : Mentee
+        + getStatus() : RegistrationStatus
+        + setStatus(RegistrationStatus) : void
+    }
+
+    enum UserType <<Enumeration>> {
+        ADMIN
+        MENTOR
+        MENTEE
+    }
+
+    enum RegistrationStatus <<Enumeration>> {
+        PENDING
+        APPROVED
+        REJECTED
+        COMPLETED
+    }
+}
+
+' ============================================
+' DTO CLASSES (Data Transfer Objects)
+' ============================================
+package "DTO Layer" <<Rectangle>> {
+
+    class MentorDTO <<DTO>> {
+        - id : Long
+        - expertise : String
+        - yearsOfExperience : Integer
+        - bio : String
+        - subjects : List<SubjectDTO>
+        __
+        + getExpertise() : String
+        + getSubjects() : List<SubjectDTO>
+    }
+
+    class SubjectDTO <<DTO>> {
+        - id : Long
+        - subjectCode : String
+        - subjectName : String
+        - description : String
+        - credits : Integer
+        __
+        + getId() : Long
+        + getSubjectCode() : String
+    }
+
+    class MentorMenteeRegistrationDTO <<DTO>> {
+        - id : Long
+        - mentorId : Long
+        - mentorName : String
+        - mentorExpertise : String
+        - menteeId : Long
+        - menteeName : String
+        - studentId : String
+        - status : RegistrationStatus
+        - registeredAt : LocalDateTime
+        - purpose : String
+        __
+        + getMentorId() : Long
+        + getMenteeId() : Long
+        + getStatus() : RegistrationStatus
+    }
+}
+
+' ============================================
+' REPOSITORY INTERFACES (Data Access Layer)
+' ============================================
+package "Repository Layer" <<Rectangle>> {
+
+    interface MentorRepository <<Repository>> {
+        + findAllActive() : List<Mentor>
+        + findAllActiveExcludingMentee(Long) : List<Mentor>
+        + findById(Long) : Optional<Mentor>
+    }
+
+    interface MenteeRepository <<Repository>> {
+        + findById(Long) : Optional<Mentee>
+        + findAll() : List<Mentee>
+    }
+
+    interface MentorSubjectRepository <<Repository>> {
+        + findByMentorId(Long) : List<MentorSubject>
+        + findByMentorIdWithSubject(Long) : List<MentorSubject>
+        + existsByMentorIdAndSubjectId(Long, Long) : Boolean
+    }
+
+    interface MentorMenteeRegistrationRepository <<Repository>> {
+        + existsByMentorIdAndMenteeId(Long, Long) : Boolean
+        + findByMentorId(Long) : List<MentorMenteeRegistration>
+        + findByMenteeId(Long) : List<MentorMenteeRegistration>
+        + findAll(Specification, Pageable) : Page<MentorMenteeRegistration>
+        + save(MentorMenteeRegistration) : MentorMenteeRegistration
+        + deleteById(Long) : void
+    }
+}
+
+' ============================================
+' SERVICE CLASSES (Business Logic Layer)
+' ============================================
+package "Service Layer" <<Rectangle>> {
+
+    class MentorService <<Service>> {
+        - mentorRepository : MentorRepository
+        - mentorSubjectRepository : MentorSubjectRepository
+        - mentorMapper : MentorMapper
+        - subjectMapper : SubjectMapper
+        __
+        + getAllMentors(Long) : List<MentorDTO>
+    }
+
+    class MentorMenteeRegistrationService <<Service>> {
+        - registrationRepository : MentorMenteeRegistrationRepository
+        - mentorRepository : MentorRepository
+        - menteeRepository : MenteeRepository
+        - registrationMapper : MentorMenteeRegistrationMapper
+        __
+        + registerMentorMentee(MentorMenteeRegistrationDTO) : MentorMenteeRegistrationDTO
+        + getAllRegistrations(String, Long, Long, RegistrationStatus, Pageable) : Page<MentorMenteeRegistrationDTO>
+        + getRegistrationById(Long) : MentorMenteeRegistrationDTO
+        + updateRegistrationStatus(Long, RegistrationStatus, String) : MentorMenteeRegistrationDTO
+        + deleteRegistration(Long) : void
+    }
+}
+
+' ============================================
+' CONTROLLER CLASSES (Presentation Layer)
+' ============================================
+package "Controller Layer" <<Rectangle>> {
+
+    class MentorController <<RestController>> {
+        - mentorService : MentorService
+        __
+        + getAllMentors(Long) : ResponseEntity<List<MentorDTO>>
+    }
+
+    class MentorMenteeController <<RestController>> {
+        - registrationService : MentorMenteeRegistrationService
+        __
+        + registerWithMentor(MentorMenteeRegistrationDTO) : ResponseEntity<MentorMenteeRegistrationDTO>
+        + getAllRegistrations(String, Long, Long, RegistrationStatus, Pageable) : ResponseEntity<Page<MentorMenteeRegistrationDTO>>
+        + getRegistrationById(Long) : ResponseEntity<MentorMenteeRegistrationDTO>
+        + cancelRegistration(Long) : ResponseEntity<Void>
+        + updateRegistrationStatus(Long, RegistrationStatus, String) : ResponseEntity<MentorMenteeRegistrationDTO>
+    }
+}
+
+' ============================================
+' MAPPER INTERFACES
+' ============================================
+package "Mapper Layer" <<Rectangle>> {
+
+    interface MentorMapper <<Mapper>> {
+        + toDTO(Mentor) : MentorDTO
+        + toEntity(MentorDTO) : Mentor
+    }
+
+    interface SubjectMapper <<Mapper>> {
+        + toDTO(Subject) : SubjectDTO
+    }
+
+    interface MentorMenteeRegistrationMapper <<Mapper>> {
+        + toDTO(MentorMenteeRegistration) : MentorMenteeRegistrationDTO
+    }
+}
+
+' ============================================
+' COMMON LAYER (Cross-Cutting Concerns)
+' ============================================
+package "Common Layer - Security" <<Rectangle>> {
+
+    class SecurityConfig <<Configuration>> {
+        - jwtAuthFilter : JwtAuthenticationFilter
+        - userDetailsService : UserDetailsService
+        __
+        + securityFilterChain(HttpSecurity) : SecurityFilterChain
+        + authenticationProvider() : AuthenticationProvider
+        + passwordEncoder() : PasswordEncoder
+    }
+
+    class JwtAuthenticationFilter <<Component>> {
+        - jwtUtil : JwtUtil
+        - userDetailsService : UserDetailsService
+        __
+        # doFilterInternal(HttpServletRequest, HttpServletResponse, FilterChain) : void
+    }
+
+    class JwtUtil <<Component>> {
+        - secret : String
+        - expiration : Long
+        __
+        + extractUsername(String) : String
+        + validateToken(String, UserDetails) : Boolean
+        + generateToken(UserDetails) : String
+        + isTokenExpired(String) : Boolean
+    }
+
+    class CustomUserDetailsService <<Service>> {
+        - userRepository : UserRepository
+        __
+        + loadUserByUsername(String) : UserDetails
+    }
+
+    interface UserRepository <<Repository>> {
+        + findByUsername(String) : Optional<User>
+    }
+}
+
+package "Common Layer - Exception" <<Rectangle>> {
+
+    class GlobalExceptionHandler <<ControllerAdvice>> {
+        __
+        + handleResourceNotFoundException(ResourceNotFoundException) : ResponseEntity<ErrorResponse>
+        + handleDuplicateResourceException(DuplicateResourceException) : ResponseEntity<ErrorResponse>
+        + handleUnauthorizedException(UnauthorizedException) : ResponseEntity<ErrorResponse>
+        + handleValidationException(MethodArgumentNotValidException) : ResponseEntity<ErrorResponse>
+        + handleGlobalException(Exception) : ResponseEntity<ErrorResponse>
+    }
+
+    class ErrorResponse <<DTO>> {
+        - timestamp : LocalDateTime
+        - status : int
+        - error : String
+        - message : String
+        - path : String
+        - validationErrors : Map<String, String>
+        __
+        + getTimestamp() : LocalDateTime
+        + getStatus() : int
+        + getMessage() : String
+    }
+
+    class ResourceNotFoundException <<Exception>> {
+        - resourceName : String
+        - fieldName : String
+        - fieldValue : Object
+        __
+        + ResourceNotFoundException(String, String, Object)
+        + getMessage() : String
+    }
+
+    class DuplicateResourceException <<Exception>> {
+        - message : String
+        __
+        + DuplicateResourceException(String)
+        + getMessage() : String
+    }
+
+    class UnauthorizedException <<Exception>> {
+        - message : String
+        __
+        + UnauthorizedException(String)
+        + getMessage() : String
+    }
+
+    abstract class RuntimeException <<Exception>> {
+        - message : String
+        __
+        + getMessage() : String
+    }
+}
+
+' ============================================
+' CLIENT LAYER (Swing UI)
+' ============================================
+package "Client Layer" <<Rectangle>> {
+
+    class RegistrationPanel <<UI>> {
+        - apiClient : ApiClient
+        - currentUserId : Long
+        - mentorsTable : JTable
+        - registerButton : JButton
+        __
+        + loadMentors() : void
+        + handleRegistration() : void
+        + showConfirmationDialog(MentorDTO) : void
+    }
+
+    class RegistrationsPanel <<UI>> {
+        - apiClient : ApiClient
+        - currentUserId : Long
+        - userType : String
+        - registrationsTable : JTable
+        - statusFilterCombo : JComboBox
+        __
+        + loadRegistrations() : void
+        + handleCancelRegistration() : void
+    }
+
+    class ApiClient <<Service>> {
+        - baseUrl : String
+        - client : OkHttpClient
+        - gson : Gson
+        - authToken : String
+        __
+        + getAllMentors(Long) : List<MentorDTO>
+        + createRegistration(MentorMenteeRegistrationDTO) : MentorMenteeRegistrationDTO
+        + getAllRegistrations(int, int, String, Long, Long, String) : PageResponse
+        + deleteRegistration(Long) : void
+    }
+}
+
+' ============================================
+' UML 2.5 RELATIONSHIPS
+' ============================================
+
+' --- Generalization (Inheritance) ---
+' Notation: Child --|> Parent (hollow triangle arrow)
+Mentor --|> User
+Mentee --|> User
+
+' --- Association (Unidirectional) ---
+' Notation: Source --> Target with multiplicity
+' ManyToOne: * --> 1
+MentorSubject "0..*" --> "1" Mentor : - mentor
+MentorSubject "0..*" --> "1" Subject : - subject
+MentorMenteeRegistration "0..*" --> "1" Mentor : - mentor
+MentorMenteeRegistration "0..*" --> "1" Mentee : - mentee
+
+' --- Dependency ---
+' Notation: Source ..> Target (dashed arrow)
+User ..> UserType : <<use>>
+MentorMenteeRegistration ..> RegistrationStatus : <<use>>
+
+' --- Dependency (Layer relationships) ---
+MentorController ..> MentorService : <<use>>
+MentorMenteeController ..> MentorMenteeRegistrationService : <<use>>
+
+MentorService ..> MentorRepository : <<use>>
+MentorService ..> MentorSubjectRepository : <<use>>
+MentorService ..> MentorMapper : <<use>>
+MentorService ..> SubjectMapper : <<use>>
+
+MentorMenteeRegistrationService ..> MentorMenteeRegistrationRepository : <<use>>
+MentorMenteeRegistrationService ..> MentorRepository : <<use>>
+MentorMenteeRegistrationService ..> MenteeRepository : <<use>>
+MentorMenteeRegistrationService ..> MentorMenteeRegistrationMapper : <<use>>
+
+' --- Dependency (Mapper to Entity/DTO) ---
+MentorMapper ..> Mentor : <<create>>
+MentorMapper ..> MentorDTO : <<create>>
+SubjectMapper ..> Subject : <<create>>
+SubjectMapper ..> SubjectDTO : <<create>>
+MentorMenteeRegistrationMapper ..> MentorMenteeRegistration : <<create>>
+MentorMenteeRegistrationMapper ..> MentorMenteeRegistrationDTO : <<create>>
+
+' --- Security Layer Relationships ---
+SecurityConfig --> JwtAuthenticationFilter : <<use>>
+SecurityConfig --> CustomUserDetailsService : <<use>>
+JwtAuthenticationFilter --> JwtUtil : <<use>>
+JwtAuthenticationFilter --> CustomUserDetailsService : <<use>>
+CustomUserDetailsService --> UserRepository : <<use>>
+UserRepository ..> User : <<query>>
+
+' --- Exception Handling Relationships ---
+GlobalExceptionHandler ..> ErrorResponse : <<create>>
+GlobalExceptionHandler ..> ResourceNotFoundException : <<handle>>
+GlobalExceptionHandler ..> DuplicateResourceException : <<handle>>
+GlobalExceptionHandler ..> UnauthorizedException : <<handle>>
+
+' Exception inheritance
+ResourceNotFoundException --|> RuntimeException
+DuplicateResourceException --|> RuntimeException
+UnauthorizedException --|> RuntimeException
+
+' Services throw exceptions
+MentorService ..> ResourceNotFoundException : <<throw>>
+MentorMenteeRegistrationService ..> ResourceNotFoundException : <<throw>>
+MentorMenteeRegistrationService ..> DuplicateResourceException : <<throw>>
+
+' Controllers use Security
+MentorController ..> SecurityConfig : <<authorize>>
+MentorMenteeController ..> SecurityConfig : <<authorize>>
+
+' Client Layer Relationships
+RegistrationPanel --> ApiClient : <<use>>
+RegistrationsPanel --> ApiClient : <<use>>
+ApiClient ..> MentorDTO : <<use>>
+ApiClient ..> MentorMenteeRegistrationDTO : <<use>>
+
+' ============================================
+' NOTES
+' ============================================
+note right of User
+  **Inheritance Strategy: JOINED**
+  @Inheritance(strategy = JOINED)
+  @DiscriminatorColumn(name = "user_type")
+end note
+
+note bottom of MentorSubject
+  **Association Table**
+  Unique constraint: (mentor_id, subject_id)
+  Unidirectional: Only MentorSubject
+  references Mentor and Subject
+end note
+
+note bottom of MentorMenteeRegistration
+  **Association Table**
+  Unique constraint: (mentor_id, mentee_id)
+  Unidirectional: Only Registration
+  references Mentor and Mentee
+end note
+
+note right of SecurityConfig
+  **Security Flow (UML 2.5)**
+  1. JwtAuthenticationFilter intercepts request
+  2. JwtUtil validates token
+  3. CustomUserDetailsService loads user
+  4. @PreAuthorize checks authorization
+end note
+
+note right of GlobalExceptionHandler
+  **Exception Handling (UML 2.5)**
+  @ControllerAdvice catches all exceptions
+  Returns standardized ErrorResponse
+  HTTP Status codes: 400, 401, 403, 404, 409, 500
+end note
+
+' ============================================
+' LEGEND
+' ============================================
+legend right
+  |= Symbol |= Meaning |
+  | ──▷ | Generalization (Inheritance) |
+  | ──> | Association (Navigable) |
+  | ─ ─> | Dependency |
+  | 0..* | Zero to many multiplicity |
+  | 1 | Exactly one multiplicity |
+  |= Stereotype |= Meaning |
+  | <<Entity>> | JPA Entity |
+  | <<Repository>> | Spring Data Repository |
+  | <<Service>> | Spring Service |
+  | <<RestController>> | Spring REST Controller |
+  | <<DTO>> | Data Transfer Object |
+  | <<Mapper>> | MapStruct Mapper |
+  | <<Configuration>> | Spring Configuration |
+  | <<Component>> | Spring Component |
+  | <<ControllerAdvice>> | Exception Handler |
+  | <<Exception>> | Custom Exception |
+  | <<UI>> | Swing UI Component |
+end legend
+
+@enduml

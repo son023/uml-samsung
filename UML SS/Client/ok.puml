@@ -1,0 +1,271 @@
+@startuml Class_Diagram_Registration_System
+
+' Entities
+abstract class User {
+    - Long id
+    - String username
+    - String password
+    - String email
+    - String fullName
+    - String phone
+    - UserType userType
+    - Boolean active
+    - LocalDateTime createdAt
+    - LocalDateTime updatedAt
+    + getId() : Long
+    + getUsername() : String
+    + getEmail() : String
+    + getFullName() : String
+}
+
+class Mentor {
+    - String expertise
+    - Integer yearsOfExperience
+    - String bio
+    + getExpertise() : String
+    + getYearsOfExperience() : Integer
+    + getBio() : String
+}
+
+class Mentee {
+    - String studentId
+    - String major
+    - Integer yearOfStudy
+    + getStudentId() : String
+    + getMajor() : String
+    + getYearOfStudy() : Integer
+}
+
+class MentorMenteeRegistration {
+    - Long id
+    - RegistrationStatus status
+    - LocalDateTime registeredAt
+    - LocalDateTime updatedAt
+    - String purpose
+    - String notes
+    + getId() : Long
+    + getStatus() : RegistrationStatus
+    + getPurpose() : String
+    + setStatus(RegistrationStatus) : void
+}
+
+enum RegistrationStatus {
+    PENDING
+    APPROVED
+    REJECTED
+    COMPLETED
+}
+
+class Subject {
+    - Long id
+    - String subjectCode
+    - String subjectName
+    - String description
+    - Integer credits
+    - Integer maxStudents
+    - Boolean active
+    + getId() : Long
+    + getSubjectCode() : String
+    + getSubjectName() : String
+}
+
+class MentorSubject {
+    - Long id
+    - LocalDateTime assignedAt
+    + getId() : Long
+    + getAssignedAt() : LocalDateTime
+}
+
+' DTOs
+class MentorDTO {
+    - String expertise
+    - Integer yearsOfExperience
+    - String bio
+    - List<SubjectDTO> subjects
+    + getExpertise() : String
+    + getSubjects() : List<SubjectDTO>
+}
+
+class SubjectDTO {
+    - Long id
+    - String subjectCode
+    - String subjectName
+    - String description
+    - Integer credits
+    + getId() : Long
+    + getSubjectCode() : String
+    + getSubjectName() : String
+}
+
+class MentorMenteeRegistrationDTO {
+    - Long id
+    - Long mentorId
+    - String mentorName
+    - String mentorExpertise
+    - Long menteeId
+    - String menteeName
+    - String studentId
+    - RegistrationStatus status
+    - LocalDateTime registeredAt
+    - LocalDateTime updatedAt
+    - String purpose
+    - String notes
+    + getMentorId() : Long
+    + getMenteeId() : Long
+    + getStatus() : RegistrationStatus
+    + setPurpose(String) : void
+}
+
+' Controllers
+class MentorController {
+    - MentorService mentorService
+    + getAllMentors(Long menteeId) : ResponseEntity<List<MentorDTO>>
+}
+
+class MentorMenteeController {
+    - MentorMenteeRegistrationService registrationService
+    + registerWithMentor(MentorMenteeRegistrationDTO) : ResponseEntity<MentorMenteeRegistrationDTO>
+    + getAllRegistrations(String, Long, Long, RegistrationStatus, Pageable) : ResponseEntity<Page<MentorMenteeRegistrationDTO>>
+    + getRegistrationById(Long) : ResponseEntity<MentorMenteeRegistrationDTO>
+    + cancelRegistration(Long) : ResponseEntity<Void>
+    + updateRegistrationStatus(Long, RegistrationStatus, String) : ResponseEntity<MentorMenteeRegistrationDTO>
+}
+
+' Services
+class MentorService {
+    - MentorRepository mentorRepository
+    - MentorMapper mentorMapper
+    - SubjectMapper subjectMapper
+    + getAllMentors(Long menteeId) : List<MentorDTO>
+}
+
+class MentorMenteeRegistrationService {
+    - MentorMenteeRegistrationRepository registrationRepository
+    - MentorRepository mentorRepository
+    - MenteeRepository menteeRepository
+    - MentorMenteeRegistrationMapper registrationMapper
+    + registerMentorMentee(MentorMenteeRegistrationDTO) : MentorMenteeRegistrationDTO
+    + getAllRegistrations(String, Long, Long, RegistrationStatus, Pageable) : Page<MentorMenteeRegistrationDTO>
+    + getRegistrationById(Long) : MentorMenteeRegistrationDTO
+    + updateRegistrationStatus(Long, RegistrationStatus, String) : MentorMenteeRegistrationDTO
+    + deleteRegistration(Long) : void
+}
+
+' Repositories
+interface MentorRepository {
+    + findAllActiveWithSubjects() : List<Mentor>
+    + findAllActiveWithSubjectsExcludingMentee(Long) : List<Mentor>
+    + findById(Long) : Optional<Mentor>
+}
+
+interface MentorMenteeRegistrationRepository {
+    + existsByMentorIdAndMenteeId(Long, Long) : Boolean
+    + findById(Long) : Optional<MentorMenteeRegistration>
+    + findAll(Specification, Pageable) : Page<MentorMenteeRegistration>
+    + save(MentorMenteeRegistration) : MentorMenteeRegistration
+    + deleteById(Long) : void
+}
+
+interface MenteeRepository {
+    + findById(Long) : Optional<Mentee>
+    + findAll() : List<Mentee>
+}
+
+' Mappers
+interface MentorMapper {
+    + toDTO(Mentor) : MentorDTO
+    + toEntity(MentorDTO) : Mentor
+}
+
+interface MentorMenteeRegistrationMapper {
+    + toDTO(MentorMenteeRegistration) : MentorMenteeRegistrationDTO
+}
+
+interface SubjectMapper {
+    + toDTO(Subject) : SubjectDTO
+}
+
+' Client Layer
+class RegistrationPanel {
+    - ApiClient apiClient
+    - Long currentUserId
+    - JTable mentorsTable
+    - DefaultTableModel tableModel
+    - JButton registerButton
+    - List<MentorDTO> mentors
+    + loadMentors() : void
+    + handleRegistration() : void
+    + showConfirmationDialog(MentorDTO) : void
+    + submitRegistration(Long, String) : void
+}
+
+class RegistrationsPanel {
+    - ApiClient apiClient
+    - Long currentUserId
+    - String userType
+    - JTable registrationsTable
+    - DefaultTableModel tableModel
+    - JComboBox<String> statusFilterCombo
+    - JComboBox<MenteeDTO> menteeFilterCombo
+    - int currentPage
+    - int pageSize
+    + loadRegistrations() : void
+    + loadMentees() : void
+    + handleCancelRegistration() : void
+}
+
+class ApiClient {
+    - String baseUrl
+    - OkHttpClient client
+    - Gson gson
+    - String authToken
+    + getAllMentors(Long) : List<MentorDTO>
+    + createRegistration(MentorMenteeRegistrationDTO) : MentorMenteeRegistrationDTO
+    + getAllRegistrations(int, int, String, Long, Long, String) : PageResponse<MentorMenteeRegistrationDTO>
+    + deleteRegistration(Long) : void
+    + getAllMentees() : List<MenteeDTO>
+}
+
+' Relationships
+User <|-- Mentor
+User <|-- Mentee
+
+Mentor "1" *-- "many" MentorMenteeRegistration : has
+Mentee "1" *-- "many" MentorMenteeRegistration : has
+
+Mentor "1" *-- "many" MentorSubject : assigned
+Subject "1" *-- "many" MentorSubject : assigned
+
+MentorMenteeRegistration --> RegistrationStatus : uses
+
+MentorController --> MentorService : uses
+MentorMenteeController --> MentorMenteeRegistrationService : uses
+
+MentorService --> MentorRepository : uses
+MentorService --> MentorMapper : uses
+MentorService --> SubjectMapper : uses
+
+MentorMenteeRegistrationService --> MentorMenteeRegistrationRepository : uses
+MentorMenteeRegistrationService --> MentorRepository : uses
+MentorMenteeRegistrationService --> MenteeRepository : uses
+MentorMenteeRegistrationService --> MentorMenteeRegistrationMapper : uses
+
+MentorRepository ..> Mentor : queries
+MentorMenteeRegistrationRepository ..> MentorMenteeRegistration : queries
+MenteeRepository ..> Mentee : queries
+
+MentorMapper ..> Mentor : maps
+MentorMapper ..> MentorDTO : maps
+MentorMenteeRegistrationMapper ..> MentorMenteeRegistration : maps
+MentorMenteeRegistrationMapper ..> MentorMenteeRegistrationDTO : maps
+SubjectMapper ..> Subject : maps
+SubjectMapper ..> SubjectDTO : maps
+
+RegistrationPanel --> ApiClient : uses
+RegistrationsPanel --> ApiClient : uses
+
+ApiClient ..> MentorDTO : uses
+ApiClient ..> MentorMenteeRegistrationDTO : uses
+ApiClient ..> MenteeDTO : uses
+
+@enduml

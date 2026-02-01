@@ -1,0 +1,33 @@
+# Build output
+target/
+*.class
+*.jar
+!lib/*.jar
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# Maven
+.mvn/
+dependency-reduced-pom.xml
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~

@@ -1,0 +1,143 @@
+@startuml Module_View_Layer_Style
+title Module View - Layered Architecture (UML 2.5)
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+
+package "Presentation Layer (Client)" #E3F2FD {
+    component [RegistrationPanel] as RP
+    component [RegistrationsPanel] as RegP
+    component [MainDashboard] as MD
+    component [ApiClient] as AC
+}
+
+package "Presentation Layer (Backend - REST API)" #E3F2FD {
+    component [MentorController] as MC
+    component [MentorMenteeController] as MMC
+    component [MenteeController] as MeC
+}
+
+package "Common Layer\n(Cross-Cutting Concerns)" #FFE0B2 {
+    component [SecurityConfig] as SecConfig
+    component [JwtAuthenticationFilter] as JWTFilter
+    component [JwtUtil] as JWT
+    component [CustomUserDetailsService] as UserDetails
+    component [GlobalExceptionHandler] as ExceptionHandler
+    component [ErrorResponse] as ErrorResp
+}
+
+package "Business Logic Layer (Service)" #C8E6C9 {
+    component [MentorService] as MS
+    component [MentorMenteeRegistrationService] as MMRS
+    component [MenteeService] as MeS
+}
+
+package "Data Access Layer (Repository)" #FFF9C4 {
+    component [MentorRepository] as MR
+    component [MentorMenteeRegistrationRepository] as MMRR
+    component [MenteeRepository] as MeR
+    component [MentorSubjectRepository] as MSR
+}
+
+package "Data Mapping Layer" #FFF9C4 {
+    component [MentorMapper] as MapM
+    component [MentorMenteeRegistrationMapper] as MapMMR
+    component [SubjectMapper] as MapS
+}
+
+database "Database (PostgreSQL/MySQL)" #FFCCBC {
+    database [users] as DB_Users
+    database [mentors] as DB_Mentors
+    database [mentees] as DB_Mentees
+    database [mentor_mentee_registrations] as DB_Reg
+    database [mentor_subjects] as DB_MS
+    database [subjects] as DB_Subjects
+}
+
+' Client to Backend API
+RP --> AC
+RegP --> AC
+MD --> RP
+MD --> RegP
+AC --> JWTFilter : HTTP/REST\n(with JWT token)
+JWTFilter --> MC : authenticated request
+JWTFilter --> MMC : authenticated request
+JWTFilter --> MeC : authenticated request
+
+' Common Layer internal relationships
+SecConfig --> JWTFilter : configures
+JWTFilter --> JWT : uses
+JWTFilter --> UserDetails : uses
+UserDetails --> DB_Users : queries
+ExceptionHandler --> ErrorResp : creates
+
+' Exception handling (cross-cutting)
+MC ..> ExceptionHandler : exceptions caught by
+MMC ..> ExceptionHandler : exceptions caught by
+MeC ..> ExceptionHandler : exceptions caught by
+MS ..> ExceptionHandler : exceptions caught by
+MMRS ..> ExceptionHandler : exceptions caught by
+MeS ..> ExceptionHandler : exceptions caught by
+
+' Controller to Service
+MC --> MS
+MMC --> MMRS
+MeC --> MeS
+
+' Service to Repository
+MS --> MR
+MS --> MSR
+MMRS --> MMRR
+MMRS --> MR
+MMRS --> MeR
+MeS --> MeR
+
+' Service to Mapper
+MS --> MapM
+MS --> MapS
+MMRS --> MapMMR
+
+' Repository to Database
+MR --> DB_Users
+MR --> DB_Mentors
+MMRR --> DB_Reg
+MeR --> DB_Users
+MeR --> DB_Mentees
+MSR --> DB_MS
+MSR --> DB_Subjects
+
+note right of RP
+  **Presentation Layer:**
+  - Client: Swing UI components
+  - Backend: REST Controllers
+  - Xử lý HTTP requests/responses
+end note
+
+note right of MS
+  **Business Logic Layer:**
+  - Business rules
+  - Validation
+  - Transaction management
+end note
+
+note right of MR
+  **Data Access Layer:**
+  - Repository pattern
+  - Entity mapping
+  - Query execution
+end note
+
+note right of DB_Users
+  **Database Layer:**
+  - Persistent storage
+  - Data integrity
+end note
+
+note right of SecConfig
+  **Common Layer:**
+  - Security: JWT authentication
+  - Authorization: Role-based access
+  - Exception handling
+  - Cross-cutting concerns
+end note
+
+@enduml
